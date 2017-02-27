@@ -3,9 +3,13 @@ param([Object]$Objects)
 $scriptPath = Split-Path -parent $MyInvocation.MyCommand.Definition
 . "$scriptPath/Select-Item.ps1"
 
-
-$sessionList = Get-Item -Path Registry::HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\Sessions
-$sessionNames = $sessionList.GetSubKeyNames();
+Try {
+    $sessionList = Get-Item -Path Registry::HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\Sessions -ErrorAction Stop
+} Catch {
+    echo "No sessions in registry"
+    exit
+}
+$sessionNames = $sessionList.GetSubKeyNames()
 $colourCount = 21
 
 <# 
@@ -14,7 +18,6 @@ $colourCount = 21
     ex. $fieldsToCopy = "BeepInd", "Font"
 #>
 $fieldsToCopy = @()
-
 
 $templateNum = Select-Item -Caption "PuTTY Sesssion Colour Template" -Message "Choose the PuTTY session to source colours from" -choiceList $sessionNames
 $templateSession = $sessionList.OpenSubKey($sessionNames[$templateNum])
@@ -30,6 +33,7 @@ foreach($field in $fieldsToCopy){
 }
 echo "Using colours from $($templateSession.ToString())"
 $templateSession.Close()
+#this is in here to test if the -WhatIf automatically flows to called cmdlets
 Remove-Item $scriptPath\testFile.txt
 
 foreach($sess in $sessionNames) {
