@@ -1,7 +1,5 @@
 ﻿[CmdletBinding(SupportsShouldProcess=$true)]
 param([Object]$Objects)
-$scriptPath = Split-Path -parent $MyInvocation.MyCommand.Definition
-. "$scriptPath/Select-Item.ps1"
 
 Try {
     $sessionList = Get-Item -Path Registry::HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\Sessions -ErrorAction Stop
