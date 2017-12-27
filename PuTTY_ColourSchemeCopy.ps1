@@ -1,6 +1,8 @@
 ﻿[CmdletBinding(SupportsShouldProcess=$true)]
 param([Object]$Objects)
 
+. "$PSScriptRoot\Select-FromArray.ps1"
+
 Try {
     $sessionList = Get-Item -Path Registry::HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\Sessions -ErrorAction Stop
 } Catch {
@@ -16,25 +18,10 @@ $colourCount = 21
     ex. $fieldsToCopy = "BeepInd", "Font"
 #>
 $fieldsToCopy = @()
-$ctr = 0
-$colWidth = 3
-$outLine = ""
-foreach($session in $sessionNames) {
-    $ctr++
-    $outLine += "[$ctr] $session`t"
-    if($ctr % $colWidth -eq 0){ 
-        Write-Output $objLine
-        $outLine = ""
-    }
-}
-if($ctr % $colWidth -ne 0){
-    #Output the extra value
-    Write-Output $outLine
-}
-$choiceStr = Read-Host -Prompt "Pick a session to copy from"
-$choice = [Convert]::ToInt32($choiceStr)
-$choice--
+Write-Host $sessionNames
+$choice = Select-FromArray $sessionNames "Pick Host to Copy From" 3 $true
 $templateSessionName = $sessionNames[$choice]
+
 $templateSession = $sessionList.OpenSubKey($templateSessionName)
 $srcKeyValuePair = @{}
 
@@ -48,26 +35,28 @@ foreach($field in $fieldsToCopy){
 }
 Write-Output "Using colours from $($templateSession.ToString())"
 $templateSession.Close()
-#this is in here to test if the -WhatIf automatically flows to called cmdlets
-#Remove-Item $scriptPath\testFile.txt
 
 foreach($sess in $sessionNames) {
     if($sess -eq $templateSessionName) {
         continue
     }
-    $doIt = Read-Host -Prompt "Apply colour scheme to $($sess) (Y/N)?"
+    $decoded = [System.Web.HttpUtility]::UrlDecode($sess)
+    $doIt = Read-Host -Prompt "Apply colour scheme to $($decoded) (Y/N)?"
     if($doIt.trim().ToUpper()[0] -eq "Y"){
         Write-Output "Doing it!"
         $targetSession = $sessionList.OpenSubKey($sess, $true)
+        $changes = 0
         foreach($key in $srcKeyValuePair.Keys){
-            Write-Output $key
             $curVal = $targetSession.GetValue($key);
             $newVal = $srcKeyValuePair[$key]
-            Write-Output "Current value is $curVal"
-            Write-Output "Template value is $newVal"
             $targetSession.SetValue($key, $newVal)
-            $curVal = $targetSession.GetValue($key)
+            $readBack = $targetSession.GetValue($key)
+            if($curVal -ne $newVal){
+                $changes++
+                Write-Output "$key `tCurVal:$curVal`tNewVal:$newVal`tReadback:$readBack"
+            }
         }
+        Write-Output "Changed $changes keys"
         $targetSession.close()
     }
 }
