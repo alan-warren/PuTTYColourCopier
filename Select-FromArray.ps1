@@ -1,3 +1,4 @@
+Add-Type -AssemblyName System.Web
 Function Select-FromArray
 {
     Param(
@@ -6,6 +7,7 @@ Function Select-FromArray
         [int]$colWidth, 
         [Boolean]$requireValid
     )
+ 
     $ctr = 0
     $outLine = ""
     $keepGoing = $true
