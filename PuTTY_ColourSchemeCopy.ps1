@@ -4,6 +4,7 @@ param(
     [boolean]$ColoursOnly=$true,
     [parameter(Mandatory = $false, ParameterSetName = "Template Setup")]
     [switch]$SetupTemplates,
+    [parameter(Mandatory = $false, ParameterSetName = "Template Setup")]
     [string]$TemplateNamesStartWith = "zzz_colour_",
     [parameter(Mandatory = $false, ParameterSetName = "AllFields")]
     [switch]$AllFields
@@ -37,14 +38,17 @@ Now you can run with -AllFields to copy all values from your zzz_colour_ templat
 other sessions (presented interactively, so you don't need to apply to all)
 
 Finally, you can run with -ColoursOnly to only copy the colour configuration (presented interactively)
+.PARAMETER
+
+
 #>
 
 . "$PSScriptRoot\Select-FromArray.ps1"
 
 Function CopySessionFields() {
     param(
-        [Object]$templateSession,
-        [Object[]]$sessionsToUpdate,
+        [Microsoft.Win32.RegistryKey]$templateSession,
+        [String[]]$sessionsToUpdate,
         [Object[]]$fieldsToCopy
     )
     #Copy the key-value pairs we want so we don't keep going to the registry
@@ -63,12 +67,11 @@ Function CopySessionFields() {
             foreach($key in $srcKeyValuePair.Keys){
                 $curVal = $targetSession.GetValue($key);
                 $newVal = $srcKeyValuePair[$key]
-                #Commenting out the line that actually pushes the change into the registry
-                #$targetSession.SetValue($key, $newVal)
+                $targetSession.SetValue($key, $newVal)
                 $readBack = $targetSession.GetValue($key)
                 if($curVal -ne $newVal){
                     $changes++
-                    Write-Output "$key `tCurVal:$curVal`tNewVal:$newVal`tReadback:$readBack"
+                    Write-Verbose "$key `tCurVal:$curVal`tNewVal:$newVal`tReadback:$readBack"
                 }
             }
             Write-Output "Changed $changes keys"
@@ -79,9 +82,9 @@ Function CopySessionFields() {
 
 Function DefineFieldsToCopy() {
     param(
-        [Object]$session
+        [Microsoft.Win32.RegistryKey]$session
     )
-    <# 
+    <# 6
     If you want to copy fields other than colours from one profile to others, you can redefine this array
     to start off non-empty
     ex. $fieldsToCopy = "BeepInd", "Font"   
@@ -106,10 +109,11 @@ Function DefineFieldsToCopy() {
         $regValueNames = $session.GetValueNames()
         foreach($regValueName in $regValueNames){
             if($fieldsToNeverCopy.Contains($regValueName)){
-                Write-Debug "Skipping $regValueName"
-                continue;
+                Write-Verbose "Skipping $regValueName"
+            } else {
+                $fieldsToCopy += $regValueName
+                Write-Verbose "Including $regValueName"
             }
-            $fieldsToCopy += $regValueName
         }
     }
     return $fieldsToCopy
@@ -137,6 +141,6 @@ if ($ColoursOnly) {
 $templateSession = $sessionList.OpenSubKey($sessionNames[$templateNum])
 
 
-$fieldsToCopy = DefineFieldsToCopy -session $templateSession
-CopySessionFields -templateSession $templateSession -sessionsToUpdate $toUpdate -fieldsToCopy $fieldsToCopy
+$fields = DefineFieldsToCopy -session $templateSession
+CopySessionFields -templateSession $templateSession -sessionsToUpdate $toUpdate -fieldsToCopy $fields
 
