@@ -1,7 +1,7 @@
-﻿[CmdletBinding(SupportsShouldProcess=$true)]
+﻿[CmdletBinding(SupportsShouldProcess=$true, DefaultParameterSetName="Colours Only")]
 param(
     [parameter(Mandatory = $false, ParameterSetName = "Colours Only")]
-    [switch]$ColoursOnly,
+    [boolean]$ColoursOnly=$true,
     [parameter(Mandatory = $false, ParameterSetName = "Template Setup")]
     [switch]$SetupTemplates,
     [string]$TemplateNamesStartWith = "zzz_colour_",
@@ -41,41 +41,20 @@ Finally, you can run with -ColoursOnly to only copy the colour configuration (pr
 
 . "$PSScriptRoot\Select-FromArray.ps1"
 
-Try {
-    $sessionList = Get-Item -Path Registry::HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\Sessions -ErrorAction Stop
-} Catch {
-    Write-Output "No sessions in registry"
-    exit
-}
-
-$sessionNames = $sessionList.GetSubKeyNames()
-if ($SetupTemplates) {
-    #Update the zzz_colours_* sessions with fields from the selected session
-    $templateNum = Select-FromArray $sessionNames 3 $true
-    $toUpdate = $sessionNames -NotMatch "$TemplateNamesStartWith"
-}
-if ($ColoursOnly) {
-    $templateNum = Select-FromArray $sessionNames 3 $true
-    $toUpdate = $sessionNames -NotMatch "$TemplateNamesStartWith"
-}
-
-$templateSession = $sessionList.OpenSubKey($sessionNames[$templateNum])
-
-
-
-CopySessionFields($toUpdate, $fieldsToCopy)
-
-Function CopySessionFields($sessionsToUpdate, $fieldsToCopy) {
+Function CopySessionFields() {
+    param(
+        [Object]$templateSession,
+        [Object[]]$sessionsToUpdate,
+        [Object[]]$fieldsToCopy
+    )
     #Copy the key-value pairs we want so we don't keep going to the registry
     $srcKeyValuePair = @{}
     foreach ($field in $fieldsToCopy) {
         $srcKeyValuePair[$field] = $templateSession.GetValue($field)
     }
     Write-Output "Using settings from $($templateSession.ToString())"
-
     $templateSession.Close()
-
-    foreach ($sess in $filteredTargetSessopms) {
+    foreach ($sess in $sessionsToUpdate) {
         $decoded = [System.Web.HttpUtility]::UrlDecode($sess)
         $doIt = Read-Host -Prompt "Apply settings to $($decoded) (Y/N)?"
         if ($doIt.trim().ToUpper()[0] -eq "Y") {
@@ -84,6 +63,7 @@ Function CopySessionFields($sessionsToUpdate, $fieldsToCopy) {
             foreach($key in $srcKeyValuePair.Keys){
                 $curVal = $targetSession.GetValue($key);
                 $newVal = $srcKeyValuePair[$key]
+                #Commenting out the line that actually pushes the change into the registry
                 #$targetSession.SetValue($key, $newVal)
                 $readBack = $targetSession.GetValue($key)
                 if($curVal -ne $newVal){
@@ -98,6 +78,9 @@ Function CopySessionFields($sessionsToUpdate, $fieldsToCopy) {
 }
 
 Function DefineFieldsToCopy() {
+    param(
+        [Object]$session
+    )
     <# 
     If you want to copy fields other than colours from one profile to others, you can redefine this array
     to start off non-empty
@@ -120,6 +103,40 @@ Function DefineFieldsToCopy() {
 
     if($AllFields -Or $SetupTemplates){
         #Step through the fields and add them to the list to be copied, unless they're in our exclusion list
-
+        $regValueNames = $session.GetValueNames()
+        foreach($regValueName in $regValueNames){
+            if($fieldsToNeverCopy.Contains($regValueName)){
+                Write-Debug "Skipping $regValueName"
+                continue;
+            }
+            $fieldsToCopy += $regValueName
+        }
     }
+    return $fieldsToCopy
 }
+
+Try {
+    $sessionList = Get-Item -Path Registry::HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\Sessions -ErrorAction Stop
+} Catch {
+    Write-Output "No sessions in registry"
+    exit
+}
+
+$sessionNames = $sessionList.GetSubKeyNames()
+if ($SetupTemplates) {
+    #Update the zzz_colours_* sessions with fields from the selected session
+    $templateNum = Select-FromArray $sessionNames "Pick a template for non colour config" 3 $true
+    $toUpdate = $sessionNames -match "$($TemplateNamesStartWith)*"
+    $ColoursOnly = $false
+}
+if ($ColoursOnly) {
+    $templateNum = Select-FromArray $sessionNames "Pick a template for colour copy" 3 $true
+    $toUpdate = $sessionNames -notmatch "$($TemplateNamesStartWith)*"
+}
+
+$templateSession = $sessionList.OpenSubKey($sessionNames[$templateNum])
+
+
+$fieldsToCopy = DefineFieldsToCopy -session $templateSession
+CopySessionFields -templateSession $templateSession -sessionsToUpdate $toUpdate -fieldsToCopy $fieldsToCopy
+
