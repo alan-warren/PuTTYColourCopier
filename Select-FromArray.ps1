@@ -11,9 +11,6 @@ Function Select-FromArray
     $ctr = 0
     $outLine = ""
     $keepGoing = $true
-    Write-Host "options:$Options"
-    Write-Host "Prompt:$Prompt"
-    Write-Host "colwidth:$colWidth"
     while($keepGoing){
         foreach($opt in $Options) {
             $ctr++
