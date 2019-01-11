@@ -43,13 +43,16 @@ Finally, you can run with -ColoursOnly to only copy the colour configuration (pr
 
 #>
 
-. "$PSScriptRoot\Select-FromArray.ps1"
+#Import-Module $PSScriptRoot\Select-FromArray.psm1
+. ".\Select-FromArray.ps1"
+
 
 Function CopySessionFields() {
     param(
         [Microsoft.Win32.RegistryKey]$templateSession,
         [String[]]$sessionsToUpdate,
-        [Object[]]$fieldsToCopy
+        [Object[]]$fieldsToCopy,
+        [switch]$NoPrompt=$false
     )
     #Copy the key-value pairs we want so we don't keep going to the registry
     $srcKeyValuePair = @{}
@@ -58,16 +61,23 @@ Function CopySessionFields() {
     }
     Write-Output "Using settings from $($templateSession.ToString())"
     $templateSession.Close()
+
     foreach ($sess in $sessionsToUpdate) {
         $decoded = [System.Web.HttpUtility]::UrlDecode($sess)
-        $doIt = Read-Host -Prompt "Apply settings to $($decoded) (Y/N)?"
+        if(!$NoPrompt){
+            $doIt = Read-Host -Prompt "Apply settings to $($decoded) (Y/N)?"
+        } else {
+            Write-Host "Updating:$($decoded)"
+            $doIt = "Y"
+        }
         if ($doIt.trim().ToUpper()[0] -eq "Y") {
             $targetSession = $sessionList.OpenSubKey($sess, $true)
             $changes = 0
             foreach($key in $srcKeyValuePair.Keys){
                 $curVal = $targetSession.GetValue($key);
                 $newVal = $srcKeyValuePair[$key]
-                $targetSession.SetValue($key, $newVal)
+                #Temporarily disable actual updating
+                #$targetSession.SetValue($key, $newVal)
                 $readBack = $targetSession.GetValue($key)
                 if($curVal -ne $newVal){
                     $changes++
@@ -129,18 +139,19 @@ Try {
 $sessionNames = $sessionList.GetSubKeyNames()
 if ($SetupTemplates) {
     #Update the zzz_colours_* sessions with fields from the selected session
-    $templateNum = Select-FromArray $sessionNames "Pick a template for non colour config" 3 $true
+    $templateNum = Select-FromArray -Options $sessionNames -Prompt "Pick a template for non colour config" -colWidth 3 -requireValid $true
     $toUpdate = $sessionNames -match "$($TemplateNamesStartWith)*"
     $ColoursOnly = $false
 }
 if ($ColoursOnly) {
-    $templateNum = Select-FromArray $sessionNames "Pick a template for colour copy" 3 $true
+    $templateNum = Select-FromArray -Options $sessionNames -Prompt "Pick a template for colour copy" -colWidth 3 -requireValid $true
     $toUpdate = $sessionNames -notmatch "$($TemplateNamesStartWith)*"
 }
 
 $templateSession = $sessionList.OpenSubKey($sessionNames[$templateNum])
 
-
+$pr = "Select sessions to update (separate by commas is more than one):"
+$selSessions = Select-FromArray -Options $toUpdate -Prompt $pr -colWidth 3 -allowInvalid = $false -allowMulti
 $fields = DefineFieldsToCopy -session $templateSession
-CopySessionFields -templateSession $templateSession -sessionsToUpdate $toUpdate -fieldsToCopy $fields
+CopySessionFields -templateSession $templateSession -sessionsToUpdate $selSessions -fieldsToCopy $fields -NoPrompt
 
